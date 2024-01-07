@@ -114,6 +114,7 @@ public class Main {
     // Method to schedule exams in the timetable
     private static void scheduleExams(AllExam allExam, ExamSlot[][] timetable) {
         Random rand = new Random();
+        Map<String, Set<Integer>> professorDaysMap = new HashMap<>();
 
         for (Exam exam : allExam.getNodes()) {
             boolean scheduled = false;
@@ -121,19 +122,20 @@ public class Main {
                 int day = rand.nextInt(DAYS);
                 int hour = rand.nextInt(HOURS);
 
-                if (canScheduleExam(timetable, day, hour, exam.getProfessorName())) {
+                if (canScheduleExam(timetable, day, hour, exam.getProfessorName(), professorDaysMap)) {
                     if (timetable[day][hour] == null) {
                         timetable[day][hour] = new ExamSlot();
                     }
                     timetable[day][hour].addExam(exam);
                     scheduled = true;
+                    professorDaysMap.computeIfAbsent(exam.getProfessorName(), k -> new HashSet<>()).add(day);
                 }
             }
         }
     }
 
     // Method to check if an exam can be scheduled at the given day and hour
-    private static boolean canScheduleExam(ExamSlot[][] timetable, int day, int hour, String professorName) {
+    private static boolean canScheduleExam(ExamSlot[][] timetable, int day, int hour, String professorName, Map<String, Set<Integer>> professorDaysMap) {
         if (timetable[day][hour] != null) {
             for (Exam exam : timetable[day][hour].exams) {
                 if (exam.getProfessorName().equals(professorName)) {
@@ -141,25 +143,24 @@ public class Main {
                 }
             }
         }
-        return true;
+
+        // Check if the professor already has an exam on this day
+        return !professorDaysMap.getOrDefault(professorName, Collections.emptySet()).contains(day);
     }
 
-    // Method to print the scheduled timetable along with total exam hours per day
     private static void printTimetable(ExamSlot[][] timetable) {
         for (int day = 0; day < DAYS; day++) {
             System.out.println(DAY_NAMES[day] + ":");
             for (int hour = 0; hour < HOURS; hour++) {
-                if (timetable[day][hour] != null && !timetable[day][hour].exams.isEmpty()) {
-                    for (Exam exam : timetable[day][hour].exams) {
-                        String classroomInfo = exam.getAssignedClassrooms().stream()
-                                .map(Classroom::getRoomID)
-                                .collect(Collectors.joining(", "));
-                        System.out.println("  " + (hour + 9) + ":00 - " + exam.getCourseID() +
-                                " (" + exam.getProfessorName() + ", " + exam.getExamDuration() +
-                                " min) in classrooms: " + classroomInfo);
-                    }
+                System.out.print("  " + (hour + 9) + ":00 - ");
+                if (timetable[day][hour] == null || timetable[day][hour].exams.isEmpty()) {
+                    System.out.println("Free");
                 } else {
-                    System.out.println("  " + (hour + 9) + ":00 - Free");
+                    for (Exam exam : timetable[day][hour].exams) {
+                        System.out.print(exam.getCourseID() + " (" + exam.getProfessorName() + ")");
+
+                    }
+                    System.out.println();
                 }
             }
             System.out.println();
@@ -168,22 +169,44 @@ public class Main {
 
 
 
-    private static void assignClassroomsToExams(List<Classroom> classrooms, AllExam allExam) {
-        for (Exam exam : allExam.getNodes()) {
-            int requiredClassrooms = exam.calculateRequiredClassrooms(classrooms.get(0).getCapacity()); // Assuming all classrooms have the same capacity
-            List<Classroom> assignedClassrooms = new ArrayList<>();
-            for (int i = 0; i < requiredClassrooms; i++) {
-                if (i < classrooms.size()) {
-                    assignedClassrooms.add(classrooms.get(i));
-                } else {
-                    // Handle case when there are not enough classrooms
-                    System.out.println("Not enough classrooms for " + exam.getCourseID());
-                    break;
+    /////////////////////////////////  CALCULATE FAULT SCORE  /////////////////////////////////////////////
+    private static String createTimeSlotKey(int day, int hour) {
+        return day + "-" + hour;
+    }
+
+    private static int calculateFaultScore(ExamSlot[][] timetable) {
+        Map<Integer, Map<String, Integer>> studentExamTimings = new HashMap<>();
+        int faultScore = 0;
+
+        // Populate the map with exam timings for each student
+        for (int day = 0; day < DAYS; day++) {
+            for (int hour = 0; hour < HOURS; hour++) {
+                if (timetable[day][hour] != null && !timetable[day][hour].exams.isEmpty()) {
+                    String timeSlotKey = createTimeSlotKey(day, hour);
+                    for (Exam exam : timetable[day][hour].exams) {
+                        for (Integer studentID : exam.getStudentIDs()) {
+                            studentExamTimings.computeIfAbsent(studentID, k -> new HashMap<>())
+                                    .merge(timeSlotKey, 1, Integer::sum);
+                        }
+                    }
                 }
             }
-            exam.setAssignedClassrooms(assignedClassrooms);
         }
+
+        // Count conflicts for each student in each time slot
+        for (Map<String, Integer> timings : studentExamTimings.values()) {
+            for (int count : timings.values()) {
+                if (count > 1) {
+                    faultScore += count - 1; // For each overlapping exam in a time slot
+                }
+            }
+        }
+
+        return faultScore;
     }
+
+
+
 
 
 
@@ -198,15 +221,19 @@ public class Main {
 
         AllExam allExam =createExamGraph(classLists);
         allExam.printGraph();
-        System.out.println(allExam.getNumberOfNodes());
+        //System.out.println(allExam.getNumberOfNodes());
 
         /////////////////////////////////////////////////////////////////////////////////
 
-        assignClassroomsToExams(classrooms, allExam);
-
         ExamSlot[][] timetable = createTimetable();
         scheduleExams(allExam, timetable);
+        int initialFaultScore = calculateFaultScore(timetable);
+        System.out.println("Initial Fault Score: " + initialFaultScore);
         printTimetable(timetable);
+
+
+
+
 
     }
 

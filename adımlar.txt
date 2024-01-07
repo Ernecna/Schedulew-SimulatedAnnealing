@@ -1,0 +1,17 @@
++ dersleri random yerleştireceğiz.
++ dersleri yerleştirirken aynı hocanın dersi aynı gün eklenemez. yani pzts varsa bir sınavı o gün o hocanın dersi bir daha
+eklenemez.
++ aynı gün, aynı saate sınav olabilir. farklı sınıflarda olacağı için
+
+
++ bu dersleri alan öğrencilerin kontrolünü simulated annealing ile kontrol edeceğiz.
++ algoritmayı şöyle yapacağız. ilk olarak aynı saatte sınavı olan öğrenci çakışması var mı onu kontrol edeceğiz(faultScore)
++ burada annealing devreye girecek, sürekli dersleri random olarak yerini değiştirecek.
++ faultScore azalıyor ise hamleyi doğru kabul edip aramaya devam edecek. faultScore 0 olduğunda kod duracak.
+
+
++ bu sınavlara random sınıflar tahsis edeceğiz.
++ sınıflar kapasitesinin yarısı kadar öğrenci alabiliyor.
++ o sınava giren öğrenci sayısı sınıf kapasitesinden fazla ise başka bir sınıf daha tahsis edebilir.
+- sınıfları tahsis ederken sınav sürelerine bakmamız gerekiyor. eğer bir sınav 10.00'da başlayıp 120 dk sürecekse,
+   saat 12.00'a kadar o sınıf başka bir sınav için tahsis edilmemeli.

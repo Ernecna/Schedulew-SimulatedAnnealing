@@ -34,8 +34,4 @@ public class AllExam {
             System.out.println("\n");
         }
     }
-
-
-
-
 }
