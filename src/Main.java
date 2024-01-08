@@ -135,6 +135,7 @@ public class Main {
     }
 
     // Method to check if an exam can be scheduled at the given day and hour
+    // Method to check if an exam can be scheduled at the given day and hour
     private static boolean canScheduleExam(ExamSlot[][] timetable, int day, int hour, String professorName, Map<String, Set<Integer>> professorDaysMap) {
         if (timetable[day][hour] != null) {
             for (Exam exam : timetable[day][hour].exams) {
@@ -157,8 +158,7 @@ public class Main {
                     System.out.println("Free");
                 } else {
                     for (Exam exam : timetable[day][hour].exams) {
-                        System.out.print(exam.getCourseID() + " (" + exam.getProfessorName() + ")");
-
+                        System.out.print(exam.getCourseID() + " (" + exam.getProfessorName() + ") ");
                     }
                     System.out.println();
                 }
@@ -206,7 +206,91 @@ public class Main {
     }
 
 
+    ///////////////////////////////////////////  SIMULATED ANNEALING  //////////////////////////////7
+    private static boolean simulatedAnnealing(ExamSlot[][] timetable) {
+        Random rand = new Random();
+        int currentFaultScore = calculateFaultScore(timetable);
+        int iteration = 0;
 
+        while (currentFaultScore > 0) {
+            iteration++;
+
+            // 1. Randomly select an exam
+            int day = rand.nextInt(DAYS);
+            int hour = rand.nextInt(HOURS);
+            if (timetable[day][hour] == null || timetable[day][hour].exams.isEmpty()) {
+                continue; // Skip if the slot is empty
+            }
+            Exam selectedExam = selectRandomExam(timetable[day][hour]);
+
+            // 2. Find a new time slot
+            int newDay = rand.nextInt(DAYS);
+            int newHour = rand.nextInt(HOURS);
+
+            // 3. Check if the move is valid
+            if (!isValidMove(timetable, newDay, selectedExam)) {
+                continue; // Skip if the move is not valid
+            }
+
+            // 4. Move the exam and calculate the new fault score
+            moveExam(timetable, day, hour, newDay, newHour, selectedExam);
+            int newFaultScore = calculateFaultScore(timetable);
+
+            // 5. Decision Making
+            if (newFaultScore < currentFaultScore) {
+                currentFaultScore = newFaultScore; // Accept the move
+            } else {
+                moveExam(timetable, newDay, newHour, day, hour, selectedExam); // Revert the move
+            }
+
+            // Add termination condition or maximum iterations if needed
+            if (iteration % 10000 == 0){
+                System.out.println("Iteration: " + iteration + "Fault Score: " + currentFaultScore);
+            }
+
+        }
+
+
+        return currentFaultScore == 0;
+    }
+
+
+    private static Exam selectRandomExam(ExamSlot examSlot) {
+        Random rand = new Random();
+        int examIndex = rand.nextInt(examSlot.exams.size());
+        return examSlot.exams.get(examIndex);
+    }
+
+
+
+    private static boolean isValidMove(ExamSlot[][] timetable, int newDay, Exam exam) {
+        String professorName = exam.getProfessorName();
+        // Check all slots on the new day
+        for (int hour = 0; hour < HOURS; hour++) {
+            if (timetable[newDay][hour] != null) {
+                for (Exam scheduledExam : timetable[newDay][hour].exams) {
+                    if (scheduledExam.getProfessorName().equals(professorName)) {
+                        return false; // Professor has an exam on the new day
+                    }
+                }
+            }
+        }
+        return true; // No conflict found
+    }
+
+
+    private static void moveExam(ExamSlot[][] timetable, int fromDay, int fromHour, int toDay, int toHour, Exam exam) {
+        // Remove exam from current slot
+        if (timetable[fromDay][fromHour] != null) {
+            timetable[fromDay][fromHour].exams.remove(exam);
+        }
+
+        // Add exam to new slot
+        if (timetable[toDay][toHour] == null) {
+            timetable[toDay][toHour] = new ExamSlot();
+        }
+        timetable[toDay][toHour].addExam(exam);
+    }
 
 
 
@@ -221,7 +305,7 @@ public class Main {
 
         AllExam allExam =createExamGraph(classLists);
         allExam.printGraph();
-        //System.out.println(allExam.getNumberOfNodes());
+        System.out.println(allExam.getNumberOfNodes());
 
         /////////////////////////////////////////////////////////////////////////////////
 
@@ -231,6 +315,21 @@ public class Main {
         System.out.println("Initial Fault Score: " + initialFaultScore);
         printTimetable(timetable);
 
+        // Simulated Annealing to resolve conflicts
+        boolean isResolved = simulatedAnnealing(timetable);
+
+        // Print the result
+        System.out.println("\n\nConflict Resolution " + (isResolved ? "Successful" + "\n+++++++++++++++++++++++++++++++++++++++++++++" :
+                "Failed" + "\n+++++++++++++++++++++++++++++++++++++++"));
+        //System.out.println("Final Fault Score: " + finalFaultScore);
+
+        // Print the final timetable
+        printTimetable(timetable);
+
+
+        // After scheduling exams
+        int faultScore = calculateFaultScore(timetable);
+        System.out.println("Total Fault Score (Student Conflicts): " + faultScore);
 
 
 
