@@ -158,7 +158,8 @@ public class Main {
                     System.out.println("Free");
                 } else {
                     for (Exam exam : timetable[day][hour].exams) {
-                        System.out.print(exam.getCourseID() + " (" + exam.getProfessorName() + ") ");
+                        System.out.print(exam.getCourseID() + " (" + exam.getProfessorName() + ") in ");
+                        printAssignedClassrooms(exam);
                     }
                     System.out.println();
                 }
@@ -292,6 +293,63 @@ public class Main {
         timetable[toDay][toHour].addExam(exam);
     }
 
+    ////////////////////////////////////////////  ASSIGN CLASSROOMS  /////////////////////////////////////////////////
+    // Method to assign classrooms to exams
+    private static void assignClassroomsToExams(AllExam allExam, List<Classroom> classrooms, ExamSlot[][] timetable) {
+        Random rand = new Random();
+        Map<String, Boolean> classroomUsageMap = new HashMap<>(); // To track daily classroom allocation
+
+        for (int day = 0; day < DAYS; day++) {
+            // Reset classroom usage for each day
+            classroomUsageMap.clear();
+
+            for (int hour = 0; hour < HOURS; hour++) {
+                if (timetable[day][hour] != null && !timetable[day][hour].exams.isEmpty()) {
+                    for (Exam exam : timetable[day][hour].exams) {
+                        allocateClassroom(exam, classrooms, classroomUsageMap, rand);
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper method to allocate classroom to an exam
+    private static void allocateClassroom(Exam exam, List<Classroom> classrooms, Map<String, Boolean> classroomUsageMap, Random rand) {
+        int numberOfStudents = exam.getNumberOfStudents();
+        int requiredCapacity = numberOfStudents; // Full capacity needed as each class can hold half its stated capacity
+        List<Classroom> assignedClassrooms = new ArrayList<>();
+
+        while (requiredCapacity > 0) {
+            int randomIndex = rand.nextInt(classrooms.size());
+            Classroom classroom = classrooms.get(randomIndex);
+
+            // Check if classroom is already used for the day and if it has enough remaining capacity
+            if (!classroomUsageMap.getOrDefault(classroom.getRoomID(), false) && (classroom.getCapacity() / 2) >= requiredCapacity) {
+                assignedClassrooms.add(classroom);
+                requiredCapacity = 0; // All students accommodated
+                classroomUsageMap.put(classroom.getRoomID(), true); // Mark classroom as used for the day
+            } else if (!classroomUsageMap.getOrDefault(classroom.getRoomID(), false)) {
+                // Partially fill the classroom
+                assignedClassrooms.add(classroom);
+                requiredCapacity -= classroom.getCapacity() / 2; // Utilize half capacity
+                classroomUsageMap.put(classroom.getRoomID(), true); // Mark classroom as used for the day
+            }
+        }
+
+        exam.setAssignedClassrooms(assignedClassrooms);
+    }
+
+    // Helper method to print assigned classrooms for an exam
+    private static void printAssignedClassrooms(Exam exam) {
+        if (exam.getAssignedClassrooms().isEmpty()) {
+            System.out.print("");
+        } else {
+            for (Classroom classroom : exam.getAssignedClassrooms()) {
+                System.out.print(classroom.getRoomID() + ", ");
+            }
+        }
+    }
+
 
 
 
@@ -319,9 +377,10 @@ public class Main {
         boolean isResolved = simulatedAnnealing(timetable);
 
         // Print the result
-        System.out.println("\n\nConflict Resolution " + (isResolved ? "Successful" + "\n+++++++++++++++++++++++++++++++++++++++++++++" :
-                "Failed" + "\n+++++++++++++++++++++++++++++++++++++++"));
+        System.out.println("\n\nConflict Resolution " + (isResolved ? "Successful" + "\n+++++++++++++++++++++++++++++++++++++++++++++" : "Failed" + "\n+++++++++++++++++++++++++++++++++++++++"));
         //System.out.println("Final Fault Score: " + finalFaultScore);
+
+        assignClassroomsToExams(allExam, classrooms, timetable);
 
         // Print the final timetable
         printTimetable(timetable);
@@ -330,9 +389,6 @@ public class Main {
         // After scheduling exams
         int faultScore = calculateFaultScore(timetable);
         System.out.println("Total Fault Score (Student Conflicts): " + faultScore);
-
-
-
 
     }
 
