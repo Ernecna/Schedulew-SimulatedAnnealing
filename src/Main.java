@@ -5,6 +5,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public class Main {
+    private static Map<String, String> blockCourseSchedule = new HashMap<>();
     ////////////////////////////////////////////////////////////////// READ&DİSPLAY CLASSROOM
     private static List<Classroom> readClassroomsFromCSV(String fileName) {
         List<Classroom> classrooms = new ArrayList<>();
@@ -113,6 +114,36 @@ public class Main {
 
     // Method to schedule exams in the timetable
     private static void scheduleExams(AllExam allExam, ExamSlot[][] timetable) {
+
+
+
+        // Schedule block course exams first
+        for (Map.Entry<String, String> entry : blockCourseSchedule.entrySet()) {
+            String courseId = entry.getKey();
+            String[] dayTime = entry.getValue().split("-");
+            int day = Arrays.asList(DAY_NAMES).indexOf(dayTime[0]);
+            int hour = Integer.parseInt(dayTime[1]) - 9;
+
+            Exam exam = allExam.getNodes().stream()
+                    .filter(e -> e.getCourseID().equals(courseId))
+                    .findFirst()
+                    .orElse(null);
+
+            if (exam != null) {
+                if (timetable[day][hour] == null) {
+                    timetable[day][hour] = new ExamSlot();
+                }
+                timetable[day][hour].addExam(exam);
+            } else {
+                System.out.println("No exam found for course ID: " + courseId);
+            }
+        }
+
+
+
+
+
+
         Random rand = new Random();
         Map<String, Set<Integer>> professorDaysMap = new HashMap<>();
 
@@ -134,7 +165,6 @@ public class Main {
         }
     }
 
-    // Method to check if an exam can be scheduled at the given day and hour
     // Method to check if an exam can be scheduled at the given day and hour
     private static boolean canScheduleExam(ExamSlot[][] timetable, int day, int hour, String professorName, Map<String, Set<Integer>> professorDaysMap) {
         if (timetable[day][hour] != null) {
@@ -167,6 +197,10 @@ public class Main {
             System.out.println();
         }
     }
+
+
+
+
 
 
 
@@ -216,51 +250,55 @@ public class Main {
         while (currentFaultScore > 0) {
             iteration++;
 
-            // 1. Randomly select an exam
             int day = rand.nextInt(DAYS);
             int hour = rand.nextInt(HOURS);
             if (timetable[day][hour] == null || timetable[day][hour].exams.isEmpty()) {
-                continue; // Skip if the slot is empty
+                continue;
             }
             Exam selectedExam = selectRandomExam(timetable[day][hour]);
 
-            // 2. Find a new time slot
-            int newDay = rand.nextInt(DAYS);
-            int newHour = rand.nextInt(HOURS);
+            if (selectedExam != null) {
+                int newDay = rand.nextInt(DAYS);
+                int newHour = rand.nextInt(HOURS);
 
-            // 3. Check if the move is valid
-            if (!isValidMove(timetable, newDay, selectedExam)) {
-                continue; // Skip if the move is not valid
+                if (!isValidMove(timetable, newDay, selectedExam)) {
+                    continue;
+                }
+
+                moveExam(timetable, day, hour, newDay, newHour, selectedExam);
+                int newFaultScore = calculateFaultScore(timetable);
+
+                if (newFaultScore < currentFaultScore) {
+                    currentFaultScore = newFaultScore;
+                } else {
+                    moveExam(timetable, newDay, newHour, day, hour, selectedExam);
+                }
             }
 
-            // 4. Move the exam and calculate the new fault score
-            moveExam(timetable, day, hour, newDay, newHour, selectedExam);
-            int newFaultScore = calculateFaultScore(timetable);
-
-            // 5. Decision Making
-            if (newFaultScore < currentFaultScore) {
-                currentFaultScore = newFaultScore; // Accept the move
-            } else {
-                moveExam(timetable, newDay, newHour, day, hour, selectedExam); // Revert the move
-            }
-
-            // Add termination condition or maximum iterations if needed
             if (iteration % 10000 == 0){
                 System.out.println("Iteration: " + iteration + "Fault Score: " + currentFaultScore);
             }
-
         }
-
 
         return currentFaultScore == 0;
     }
 
 
+
     private static Exam selectRandomExam(ExamSlot examSlot) {
         Random rand = new Random();
-        int examIndex = rand.nextInt(examSlot.exams.size());
-        return examSlot.exams.get(examIndex);
+        List<Exam> movableExams = examSlot.exams.stream()
+                .filter(exam -> !blockCourseSchedule.containsKey(exam.getCourseID()))
+                .collect(Collectors.toList());
+
+        if (movableExams.isEmpty()) {
+            return null; // No movable exam in this slot
+        }
+
+        int examIndex = rand.nextInt(movableExams.size());
+        return movableExams.get(examIndex);
     }
+
 
 
 
@@ -353,17 +391,50 @@ public class Main {
 
 
 
+    // Method to read block course schedule from user input
+    private static void readBlockCourseSchedule() {
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print("Enter the number of block courses: ");
+        int numberOfBlockCourses = scanner.nextInt();
+        scanner.nextLine(); // consume the leftover newline
+
+        for (int i = 0; i < numberOfBlockCourses; i++) {
+            System.out.println("Enter the details for block course " + (i + 1) + ":");
+
+            System.out.print("Enter the course ID (e.g., CENG101): ");
+            String courseId = scanner.nextLine();
+
+            System.out.print("Enter the day (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday): ");
+            String day = scanner.nextLine();
+
+            System.out.print("Enter the hour (9-18): ");
+            int hour = scanner.nextInt();
+            scanner.nextLine(); // consume the leftover newline
+
+            blockCourseSchedule.put(courseId, day + "-" + hour);
+        }
+    }
+
+
+
     public static void main(String[] args) {
         List<Classroom> classrooms = readClassroomsFromCSV("Classes.csv");
         //displayClasses(classrooms);
         List<ClassList> classLists = readClassListFromCSV("1000student.csv");
         //displayClassList(classLists);
 
+
+
+        readBlockCourseSchedule();
+
+
+
         //GRAPH READY
 
         AllExam allExam =createExamGraph(classLists);
-        allExam.printGraph();
-        System.out.println(allExam.getNumberOfNodes());
+        //allExam.printGraph();
+        //System.out.println(allExam.getNumberOfNodes());
 
         /////////////////////////////////////////////////////////////////////////////////
 
@@ -371,7 +442,7 @@ public class Main {
         scheduleExams(allExam, timetable);
         int initialFaultScore = calculateFaultScore(timetable);
         System.out.println("Initial Fault Score: " + initialFaultScore);
-        printTimetable(timetable);
+        //1printTimetable(timetable);
 
         // Simulated Annealing to resolve conflicts
         boolean isResolved = simulatedAnnealing(timetable);
@@ -389,6 +460,9 @@ public class Main {
         // After scheduling exams
         int faultScore = calculateFaultScore(timetable);
         System.out.println("Total Fault Score (Student Conflicts): " + faultScore);
+
+
+
 
     }
 
