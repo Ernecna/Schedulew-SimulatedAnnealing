@@ -135,7 +135,7 @@ public class Main {
                 }
                 timetable[day][hour].addExam(exam);
             } else {
-                System.out.println("No exam found for course ID: " + courseId);
+                System.out.println("!!! No exam found for course ID: " + courseId);
             }
         }
 
@@ -389,8 +389,6 @@ public class Main {
     }
 
 
-
-
     // Method to read block course schedule from user input
     private static void readBlockCourseSchedule() {
         Scanner scanner = new Scanner(System.in);
@@ -417,6 +415,37 @@ public class Main {
     }
 
 
+    /////////////////  IF 6 DAYS ARE NOT ENOUGH, ADD +1 DAY
+    private static ExamSlot[][] extendTimetableForSunday(ExamSlot[][] oldTimetable) {
+        ExamSlot[][] newTimetable = new ExamSlot[7][HOURS]; // 7 gün, Pazar dahil
+        for (int day = 0; day < 6; day++) {
+            System.arraycopy(oldTimetable[day], 0, newTimetable[day], 0, HOURS);
+        }
+        newTimetable[6] = new ExamSlot[HOURS]; // Pazar günü yuvalarını başlat
+        for (int hour = 0; hour < HOURS; hour++) {
+            newTimetable[6][hour] = new ExamSlot();
+        }
+        return newTimetable;
+    }
+
+    ////////////////  ADD COURSES AGAIN AFTER ADDING +1 DAY TO SCHEDULE
+    private static void rescheduleRemainingExams(AllExam allExam, ExamSlot[][] timetable) {
+        for (Exam exam : allExam.getNodes()) {
+            if (!exam.isScheduled()) {
+                // Zamanlanmamış sınav için uygun bir zaman dilimi bul
+                for (int hour = 0; hour < HOURS; hour++) {
+                    if (timetable[6][hour].exams.isEmpty()) { // Pazar günü için kontrol et
+                        timetable[6][hour].addExam(exam);
+                        exam.setScheduled(true);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+
+
 
     public static void main(String[] args) {
         List<Classroom> classrooms = readClassroomsFromCSV("Classes.csv");
@@ -424,25 +453,40 @@ public class Main {
         List<ClassList> classLists = readClassListFromCSV("1000student.csv");
         //displayClassList(classLists);
 
-
-
         readBlockCourseSchedule();
-
-
 
         //GRAPH READY
 
         AllExam allExam =createExamGraph(classLists);
-        //allExam.printGraph();
-        //System.out.println(allExam.getNumberOfNodes());
+        allExam.printGraph();
+        System.out.println(allExam.getNumberOfNodes());
 
         /////////////////////////////////////////////////////////////////////////////////
 
         ExamSlot[][] timetable = createTimetable();
         scheduleExams(allExam, timetable);
+
+        /////////////////////////////////////  CHECK FOR +1 (SUNDAY) DAY  ///////////////////////////////////////////
+        // Check if all exams are scheduled
+        boolean allExamsScheduled = true;
+        for (Exam exam : allExam.getNodes()) {
+            if (!exam.isScheduled()) {
+                allExamsScheduled = false;
+                break;
+            }
+        }
+
+        // If not all exams are scheduled, extend the timetable to include Sunday
+        if (!allExamsScheduled) {
+            timetable = extendTimetableForSunday(timetable);
+            // Reschedule remaining exams
+            rescheduleRemainingExams(allExam, timetable);
+        }
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
         int initialFaultScore = calculateFaultScore(timetable);
         System.out.println("Initial Fault Score: " + initialFaultScore);
-        //1printTimetable(timetable);
+        printTimetable(timetable);
 
         // Simulated Annealing to resolve conflicts
         boolean isResolved = simulatedAnnealing(timetable);

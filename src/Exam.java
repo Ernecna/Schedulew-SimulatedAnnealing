@@ -8,6 +8,7 @@ public class Exam {
         private String courseID;
         private int examDuration;
         private List<Exam> conflicts;
+        private boolean isScheduled = false;
     private List<Classroom> assignedClassrooms; // New field to store assigned classrooms
 
         public Exam(List<Integer> studentIDs, String professorName, String courseID, int examDuration) {
@@ -60,6 +61,15 @@ public class Exam {
 
     public int calculateRequiredClassrooms(int classroomCapacity) {
         return (int) Math.ceil((double) getNumberOfStudents() / (classroomCapacity / 2));
+    }
+
+    // Method to mark this exam as scheduled
+    public void setScheduled(boolean scheduled) {
+        this.isScheduled = scheduled;
+    }
+
+    public boolean isScheduled() {
+        return this.isScheduled;
     }
 
 }
