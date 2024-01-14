@@ -29,7 +29,7 @@ public class Main {
             System.out.println("Room ID: " + classroom.getRoomID() + ", Capacity: " + classroom.getCapacity());
         }
     }
-    /////////////////////////////////////////////////////////////////////////////////////////READ&&DİSPLAY CLASSLİST
+    /////////////////////////////////////////////////////////////////////////////////////////READ&&DİSPLAY CLASS LİST
     private static List<ClassList> readClassListFromCSV(String fileName) {
         List<ClassList> classLists = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
@@ -103,7 +103,7 @@ public class Main {
             for (Exam exam : exams) {
                 sb.append(exam.getCourseID()).append(" (").append(exam.getProfessorName()).append("), ");
             }
-            return sb.length() > 0 ? sb.substring(0, sb.length() - 2) : "Free";
+            return !sb.isEmpty() ? sb.substring(0, sb.length() - 2) : "Free";
         }
     }
 
@@ -114,9 +114,6 @@ public class Main {
 
     // Method to schedule exams in the timetable
     private static void scheduleExams(AllExam allExam, ExamSlot[][] timetable) {
-
-
-
         // Schedule block course exams first
         for (Map.Entry<String, String> entry : blockCourseSchedule.entrySet()) {
             String courseId = entry.getKey();
@@ -134,20 +131,19 @@ public class Main {
                     timetable[day][hour] = new ExamSlot();
                 }
                 timetable[day][hour].addExam(exam);
+                exam.setScheduled(true); // Mark the block course exam as scheduled
             } else {
                 System.out.println("!!! No exam found for course ID: " + courseId);
             }
         }
 
-
-
-
-
-
         Random rand = new Random();
         Map<String, Set<Integer>> professorDaysMap = new HashMap<>();
 
+        // Schedule other exams
         for (Exam exam : allExam.getNodes()) {
+            if (exam.isScheduled()) continue; // Skip if the exam is already scheduled (like block courses)
+
             boolean scheduled = false;
             while (!scheduled) {
                 int day = rand.nextInt(DAYS);
@@ -159,11 +155,13 @@ public class Main {
                     }
                     timetable[day][hour].addExam(exam);
                     scheduled = true;
+                    exam.setScheduled(true); // Mark the exam as scheduled
                     professorDaysMap.computeIfAbsent(exam.getProfessorName(), k -> new HashSet<>()).add(day);
                 }
             }
         }
     }
+
 
     // Method to check if an exam can be scheduled at the given day and hour
     private static boolean canScheduleExam(ExamSlot[][] timetable, int day, int hour, String professorName, Map<String, Set<Integer>> professorDaysMap) {
@@ -183,18 +181,55 @@ public class Main {
         for (int day = 0; day < DAYS; day++) {
             System.out.println(DAY_NAMES[day] + ":");
             for (int hour = 0; hour < HOURS; hour++) {
-                System.out.print("  " + (hour + 9) + ":00 - ");
-                if (timetable[day][hour] == null || timetable[day][hour].exams.isEmpty()) {
-                    System.out.println("Free");
-                } else {
+                // This assumes that the timetable starts at 9 AM
+                int startHour = (hour + 9); // Start hours in 24-hour format
+                String timeSuffix = startHour >= 12 && startHour < 24 ? "PM" : "AM";
+                if (startHour > 12) {
+                    startHour -= 12; // Convert to 12-hour format for PM times
+                }
+                if (startHour == 0) {
+                    startHour = 12; // Adjust for midnight
+                }
+
+                // Loop through each slot in the timetable
+                if (timetable[day][hour] != null && !timetable[day][hour].exams.isEmpty()) {
                     for (Exam exam : timetable[day][hour].exams) {
-                        System.out.print(exam.getCourseID() + " (" + exam.getProfessorName() + ") in ");
-                        printAssignedClassrooms(exam);
+                        int examDurationHours = exam.getExamDuration() / 60;
+                        int examDurationMinutes = exam.getExamDuration() % 60;
+                        int endHour24 = (hour + 9 + examDurationHours); // End hour in 24-hour format
+                        String endTimeSuffix = endHour24 >= 12 && endHour24 < 24 ? "PM" : "AM";
+                        if (endHour24 >= 24) {
+                            endHour24 -= 24; // Adjust for times past midnight
+                        }
+                        int endHour = endHour24 > 12 ? endHour24 - 12 : endHour24;
+                        if (endHour == 0) {
+                            endHour = 12; // Adjust for midnight
+                        }
+                        if (endHour24 == 12) { // Handle noon
+                            endTimeSuffix = "PM";
+                        }
+                        if (endHour24 == 24) { // Handle midnight
+                            endTimeSuffix = "AM";
+                        }
+
+                        // Check for block courses
+                        boolean isBlockCourse = blockCourseSchedule.containsKey(exam.getCourseID());
+
+                        // For block course, append "(Block)" to the course ID
+                        String courseDisplay = isBlockCourse ? exam.getCourseID() + " (Common Course)" : exam.getCourseID();
+
+                        // Find the room assignment
+                        String roomAssignment = exam.getAssignedClassrooms().stream()
+                                .map(Classroom::getRoomID)
+                                .collect(Collectors.joining(", "));
+
+                        // Print the time, course,and room information
+                        System.out.printf("%02d:00 %s - %02d:%02d %s: %s - Room %s\n",
+                        startHour, timeSuffix, endHour, examDurationMinutes, endTimeSuffix, courseDisplay, roomAssignment);
                     }
-                    System.out.println();
                 }
             }
-            System.out.println();
+                        System.out.println();
         }
     }
 
@@ -273,10 +308,6 @@ public class Main {
                 } else {
                     moveExam(timetable, newDay, newHour, day, hour, selectedExam);
                 }
-            }
-
-            if (iteration % 10000 == 0){
-                System.out.println("Iteration: " + iteration + "Fault Score: " + currentFaultScore);
             }
         }
 
@@ -377,51 +408,76 @@ public class Main {
         exam.setAssignedClassrooms(assignedClassrooms);
     }
 
-    // Helper method to print assigned classrooms for an exam
-    private static void printAssignedClassrooms(Exam exam) {
-        if (exam.getAssignedClassrooms().isEmpty()) {
-            System.out.print("");
-        } else {
-            for (Classroom classroom : exam.getAssignedClassrooms()) {
-                System.out.print(classroom.getRoomID() + ", ");
-            }
-        }
-    }
-
-
     // Method to read block course schedule from user input
-    private static void readBlockCourseSchedule() {
+    private static void readBlockCourseSchedule(List<ClassList> classLists) {
         Scanner scanner = new Scanner(System.in);
+
+        // Print out each course ID only once for reference
+        Set<String> uniqueCourseIds = classLists.stream()
+                .map(ClassList::getCourseID)
+                .collect(Collectors.toSet());
+
+
 
         System.out.print("Enter the number of block courses: ");
         int numberOfBlockCourses = scanner.nextInt();
         scanner.nextLine(); // consume the leftover newline
 
         for (int i = 0; i < numberOfBlockCourses; i++) {
+            String courseId="";
+            String day;
+            int hour;
+
             System.out.println("Enter the details for block course " + (i + 1) + ":");
+            System.out.print("Available Course IDs: [");
+            for (String courseIds : uniqueCourseIds) {
+                System.out.print(courseIds+", ");
+            }
+            System.out.println("]");
 
-            System.out.print("Enter the course ID (e.g., CENG101): ");
-            String courseId = scanner.nextLine();
+            do {
+                System.out.print("Enter the course ID: ");
+                courseId = scanner.nextLine();
+                if (!uniqueCourseIds.contains(courseId)){
+                    System.out.println("Invalid Course ID. Please enter a valid Course ID from the list above.");
+                }
+            } while(!uniqueCourseIds.contains(courseId));
 
-            System.out.print("Enter the day (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday): ");
-            String day = scanner.nextLine();
+            do {
+                System.out.print("Enter the day (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday): ");
+                day = scanner.nextLine();
 
-            System.out.print("Enter the hour (9-18): ");
-            int hour = scanner.nextInt();
-            scanner.nextLine(); // consume the leftover newline
+                if (!Arrays.asList(DAY_NAMES).contains(day)) {
+                    System.out.println("Invalid day. Please enter a valid day of the week (e.g., Monday, Tuesday, etc.).");
+                }
+            } while (!Arrays.asList(DAY_NAMES).contains(day));
+            do {
+                System.out.print("Enter the hour (9-18): ");
+                while (!scanner.hasNextInt()) {
+                    System.out.print("That's not a number! Enter the hour (9-18): ");
+                    scanner.next(); // consume the non-integer input
+                }
+                hour = scanner.nextInt();
+                scanner.nextLine(); // consume the newline after the number
+                if (!(hour >= 9 && hour <= 17)) {
+                    System.out.println("Invalid hour. Please enter a valid hour between 9 and 18.");
+                }
+            } while (!(hour >= 9 && hour <= 17));
 
             blockCourseSchedule.put(courseId, day + "-" + hour);
         }
     }
 
 
+
+
     /////////////////  IF 6 DAYS ARE NOT ENOUGH, ADD +1 DAY
     private static ExamSlot[][] extendTimetableForSunday(ExamSlot[][] oldTimetable) {
-        ExamSlot[][] newTimetable = new ExamSlot[7][HOURS]; // 7 gün, Pazar dahil
+        ExamSlot[][] newTimetable = new ExamSlot[7][HOURS]; // 7 day, include Sunday
         for (int day = 0; day < 6; day++) {
             System.arraycopy(oldTimetable[day], 0, newTimetable[day], 0, HOURS);
         }
-        newTimetable[6] = new ExamSlot[HOURS]; // Pazar günü yuvalarını başlat
+        newTimetable[6] = new ExamSlot[HOURS];
         for (int hour = 0; hour < HOURS; hour++) {
             newTimetable[6][hour] = new ExamSlot();
         }
@@ -432,9 +488,9 @@ public class Main {
     private static void rescheduleRemainingExams(AllExam allExam, ExamSlot[][] timetable) {
         for (Exam exam : allExam.getNodes()) {
             if (!exam.isScheduled()) {
-                // Zamanlanmamış sınav için uygun bir zaman dilimi bul
+                // Find a convenient time slot for the unscheduled exam
                 for (int hour = 0; hour < HOURS; hour++) {
-                    if (timetable[6][hour].exams.isEmpty()) { // Pazar günü için kontrol et
+                    if (timetable[6][hour].exams.isEmpty()) { // Check it out for Sunday.
                         timetable[6][hour].addExam(exam);
                         exam.setScheduled(true);
                         break;
@@ -453,7 +509,7 @@ public class Main {
         List<ClassList> classLists = readClassListFromCSV("1000student.csv");
         //displayClassList(classLists);
 
-        readBlockCourseSchedule();
+        readBlockCourseSchedule(classLists);
 
         //GRAPH READY
 
